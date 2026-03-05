@@ -39,15 +39,153 @@ const TOOLS = [
   { name: "execute_trade", risk: "high", label: "Execute Trade" },
 ];
 
+const SANDBOX_ALLOWED: Record<string, string[]> = {
+  STRICT: ["low"],
+  ADAPTIVE: ["low", "medium"],
+  OPEN: ["low", "medium", "high"],
+};
+
 function isToolAllowed(risk: string, score: number): boolean {
   if (score < 10) return false;
   const level = getSandboxLevel(score);
-  const allowed: Record<string, string[]> = {
-    STRICT: ["low"],
-    ADAPTIVE: ["low", "medium"],
-    OPEN: ["low", "medium", "high"],
-  };
-  return (allowed[level] || []).includes(risk);
+  return (SANDBOX_ALLOWED[level] || []).includes(risk);
+}
+
+// ─── Tool definitions (simulated) ───────────────────────────────────
+
+interface ToolDef {
+  risk: "low" | "medium" | "high";
+  execute: (args: Record<string, string>) => string;
+}
+
+const TOOL_DEFS: Record<string, ToolDef> = {
+  read_file: {
+    risk: "low",
+    execute: (args) => `Contents of ${args.path || "data.txt"}: {"users": 142, "revenue": "$12,400"}`,
+  },
+  search_web: {
+    risk: "medium",
+    execute: (args) => `Top results for "${args.query || "flights"}": 1) NYC flights from $89 (JetBlue), 2) $120 round-trip (Delta), 3) $95 one-way (Spirit)`,
+  },
+  send_email: {
+    risk: "high",
+    execute: (args) => `Email sent to ${args.to || "team@company.com"}: "Update from DatOps Agent"`,
+  },
+  execute_trade: {
+    risk: "high",
+    execute: (args) => `Trade executed: ${args.action || "BUY"} ${args.quantity || "100"} ${args.symbol || "AAPL"} at market price`,
+  },
+};
+
+// ─── Intent detection (all client-side) ─────────────────────────────
+
+interface ToolCall {
+  tool: string;
+  args: Record<string, string>;
+  risk: string;
+}
+
+function detectIntent(message: string): ToolCall[] {
+  const lower = message.toLowerCase();
+  const calls: ToolCall[] = [];
+
+  if (lower.includes("read") || lower.includes("file") || lower.includes("open") || lower.includes("cat ")) {
+    calls.push({
+      tool: "read_file",
+      args: { path: lower.includes("user") ? "users.json" : "data.txt" },
+      risk: "low",
+    });
+  }
+
+  if (lower.includes("search") || lower.includes("find") || lower.includes("look up") || lower.includes("flight") || lower.includes("weather") || lower.includes("google")) {
+    const query = message.replace(/^(search|find|look up|google)\s*(for|about)?\s*/i, "") || "flights to NYC";
+    calls.push({
+      tool: "search_web",
+      args: { query: query.trim() },
+      risk: "medium",
+    });
+  }
+
+  if (lower.includes("email") || lower.includes("send") || lower.includes("mail") || lower.includes("notify")) {
+    calls.push({
+      tool: "send_email",
+      args: {
+        to: lower.includes("@") ? (lower.match(/[\w.-]+@[\w.-]+/)?.[0] || "team@company.com") : "team@company.com",
+      },
+      risk: "high",
+    });
+  }
+
+  if (lower.includes("trade") || lower.includes("buy") || lower.includes("sell") || lower.includes("stock") || lower.includes("shares")) {
+    calls.push({
+      tool: "execute_trade",
+      args: {
+        action: lower.includes("sell") ? "SELL" : "BUY",
+        symbol: "AAPL",
+        quantity: "100",
+      },
+      risk: "high",
+    });
+  }
+
+  if (calls.length === 0) {
+    calls.push({
+      tool: "search_web",
+      args: { query: message },
+      risk: "medium",
+    });
+  }
+
+  return calls;
+}
+
+function processMessage(message: string, trustScore: number): { toolResults: ToolResult[] } {
+  const score = trustScore;
+  const sandboxLevel = getSandboxLevel(score);
+  const toolCalls = detectIntent(message);
+
+  const results: ToolResult[] = toolCalls.map((call) => {
+    const tool = TOOL_DEFS[call.tool];
+    if (!tool) {
+      return { tool: call.tool, risk: call.risk, allowed: false, blocked: { reason: "Unknown tool", trustScore: score, sandboxLevel } };
+    }
+
+    if (score < 10) {
+      return {
+        tool: call.tool,
+        risk: call.risk,
+        allowed: false,
+        blocked: { reason: `Trust score ${score} is below minimum threshold (10)`, trustScore: score, sandboxLevel },
+      };
+    }
+
+    if (call.risk === "high" && score < 70) {
+      return {
+        tool: call.tool,
+        risk: call.risk,
+        allowed: false,
+        blocked: { reason: `High-risk tool requires trust >= 70, current: ${score}`, trustScore: score, sandboxLevel },
+      };
+    }
+
+    if (!(SANDBOX_ALLOWED[sandboxLevel] || []).includes(call.risk)) {
+      return {
+        tool: call.tool,
+        risk: call.risk,
+        allowed: false,
+        blocked: { reason: `${sandboxLevel} sandbox does not allow ${call.risk}-risk tools`, trustScore: score, sandboxLevel },
+      };
+    }
+
+    return {
+      tool: call.tool,
+      risk: call.risk,
+      allowed: true,
+      result: tool.execute(call.args),
+    };
+  });
+
+  return { toolResults: results };
 }
 
 const SUGGESTIONS = [
@@ -73,7 +211,7 @@ export default function DemoPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function sendMessage(text: string) {
+  function sendMessage(text: string) {
     if (!text.trim() || loading) return;
 
     const userMsg: ChatMessage = { role: "user", text };
@@ -81,28 +219,17 @@ export default function DemoPage() {
     setInput("");
     setLoading(true);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, trustScore }),
-      });
-      const data = await res.json();
-
+    // Simulate a brief processing delay
+    setTimeout(() => {
+      const { toolResults } = processMessage(text, trustScore);
       const agentMsg: ChatMessage = {
         role: "agent",
-        text: data.response,
-        toolResults: data.toolResults,
+        text: "",
+        toolResults,
       };
       setMessages((prev) => [...prev, agentMsg]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", text: "Connection error. Try again." },
-      ]);
-    } finally {
       setLoading(false);
-    }
+    }, 300);
   }
 
   return (
