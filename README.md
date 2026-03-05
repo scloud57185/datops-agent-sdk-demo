@@ -1,5 +1,7 @@
 # DatOps Agent SDK — Interactive Demo
 
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/scloud57185/datops-agent-sdk-demo)
+
 **Trust-gated AI agent tool execution in the browser.** No API keys needed.
 
 This is a Next.js demo showing how the [DatOps Agent SDK](https://www.npmjs.com/package/@datplatform/agent-sdk) enforces trust-based access control on AI agent tools.
