@@ -49,6 +49,30 @@ const tools = DatOps.wrapVercelTools(myTools, {
 });
 ```
 
+## Getting Your API Key
+
+1. **Sign up** at [datops.ai/pages/signup.html](https://www.datops.ai/pages/signup.html) (individual or organization)
+2. **Log in** at [datops.ai/pages/login.html](https://www.datops.ai/pages/login.html)
+3. Go to **SDK Keys** in the dashboard sidebar
+4. Click **Generate New Key** — give it a name
+5. **Copy the API key** — it's shown once, never stored
+
+Replace `dat_xxx` above with your real key.
+
+## Trust Shield Badge
+
+Once your agent is registered, embed a live trust score badge in your README:
+
+```markdown
+[![DAT Trust](https://www.datops.ai/api/v1/badge/YOUR_AGENT_DID.svg)](https://www.datops.ai/pages/registry?agent=YOUR_AGENT_DID)
+```
+
+The badge updates in real time as your agent earns trust. Click it to see the full profile on the [DAT Trust Registry](https://www.datops.ai/pages/registry.html).
+
+**Style options:** `?style=flat` (default) · `?style=plastic` · `?label=Custom+Label`
+
+Your agent DID and ready-to-paste badge markdown are shown on the SDK Keys page after generating a key.
+
 ## Stack
 
 - [Next.js 15](https://nextjs.org/) (App Router)
